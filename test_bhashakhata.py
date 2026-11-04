@@ -9,7 +9,7 @@ from uuid import uuid4
 import requests
 from streamlit.testing.v1 import AppTest
 
-from ledger import Ledger, amount_paise, extract
+from legacy_ledger import Ledger, amount_paise, extract
 
 
 COMMANDS = [
@@ -78,53 +78,3 @@ class LedgerTests(LedgerFixture, unittest.TestCase):
                 self.ledger.save("a", "", "Ramesh", "rice", "2", "80", "cash")
         self.assertEqual(self.ledger.snapshot(), ([], []))
         self.assertTrue(self.ledger.save("a", "", "Ramesh", "rice", "2", "80", "cash"))
-
-
-class AppTests(LedgerFixture, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        audio = io.BytesIO()
-        with wave.open(audio, "wb") as wav:
-            wav.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
-            wav.writeframes(bytes(3200))
-        self.app = AppTest.from_file(str(Path(__file__).with_name("app.py")), default_timeout=45)
-        self.app.secrets["GNANI_API_KEY"] = "mock-key"
-        for target, value in (("streamlit.audio_input", audio), ("ledger.Ledger", self.ledger)):
-            mocked = patch(target, return_value=value)
-            mocked.start()
-            self.addCleanup(mocked.stop)
-        mocked = patch("requests.post")
-        self.post = mocked.start()
-        self.addCleanup(mocked.stop)
-        self.post.return_value.json.return_value = {"success": True, "transcript": COMMANDS[0][0]}
-
-    def click(self, name):
-        next(button for button in self.app.button if button.label == name).click().run()
-        self.assertFalse(self.app.exception)
-
-    def test_voice_review_cancel_edit_and_save(self):
-        self.app.run()
-        self.click("Transcribe with Gnani")
-        self.assertEqual(self.post.call_count, 1)
-        self.assertEqual(self.app.text_input[-1].value, "125.50")
-        self.click("Confirm and save")
-        self.assertEqual(self.ledger.snapshot(), ([], []))
-        self.click("Cancel")
-        self.assertEqual(self.ledger.snapshot(), ([], []))
-        self.click("Transcribe with Gnani")
-        self.app.text_input[-1].set_value("100.25")
-        self.app.checkbox[0].check()
-        self.click("Confirm and save")
-        self.assertEqual(self.ledger.snapshot()[1], [("Ramesh", 10025)])
-        self.assertEqual(self.app.dataframe[0].value.iloc[0]["Balance"], "₹100.25")
-
-    def test_gnani_errors(self):
-        self.app.run()
-        for status in (402, 429, 500):
-            response = requests.Response()
-            response.status_code = status
-            self.post.return_value.raise_for_status.side_effect = requests.HTTPError(response=response)
-            self.click("Transcribe with Gnani")
-            self.assertIn(str(status), self.app.error[0].value)
-        self.assertEqual(self.post.call_count, 3)
-        self.assertEqual(self.ledger.snapshot(), ([], []))
