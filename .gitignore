@@ -11,3 +11,7 @@ __pycache__/
 
 # Ignore environment variables
 .env
+
+# Local ledger and private environment variants
+*.sqlite3*
+.env.*

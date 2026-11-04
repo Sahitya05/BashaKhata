@@ -3,10 +3,13 @@ import hashlib
 import io
 import json
 import wave
+import sqlite3
+from pathlib import Path
+from uuid import uuid4
 
 import requests
 import streamlit as st
-from deep_translator import GoogleTranslator
+from ledger import KINDS, Ledger, extract
 
 
 # ==========================================
@@ -32,13 +35,6 @@ INPUT_OPTIONS = {
     "Automatic detection": "indic-auto"
 }
 
-OUTPUT_OPTIONS = {
-    "Original mixed-language transcript": None,
-    "English": "en",
-    "Telugu (తెలుగు)": "te",
-    "Hindi (हिन्दी)": "hi"
-}
-
 FORMAT_OPTIONS = {
     "Mixed scripts (codemix)": "codemix",
     "Numbers and currency (transcribe)": "transcribe"
@@ -52,21 +48,7 @@ DEFAULT_TERMS = (
 
 
 # ==========================================
-# API KEY
-# ==========================================
-
-try:
-    API_KEY = st.secrets["GNANI_API_KEY"]
-except Exception:
-    st.error(
-        "Gnani API key is missing. "
-        "Check .streamlit/secrets.toml"
-    )
-    st.stop()
-
-
-# ==========================================
-# FUNCTIONS
+# TRANSCRIPTION
 # ==========================================
 
 def audio_duration(audio_bytes):
@@ -79,6 +61,7 @@ def audio_duration(audio_bytes):
 
 
 def call_gnani(
+    api_key,
     audio_bytes,
     language_code,
     output_format,
@@ -106,7 +89,7 @@ def call_gnani(
     response = requests.post(
         GNANI_URL,
         headers={
-            "X-API-Key-ID": API_KEY
+            "X-API-Key-ID": api_key
         },
         files={
             "audio_file": (
@@ -123,7 +106,8 @@ def call_gnani(
 
     result = response.json()
 
-    if result.get("success") is not True:
+    if (not isinstance(result, dict) or result.get("success") is not True
+            or not isinstance(result.get("transcript"), str)):
         raise ValueError(
             "Gnani did not complete transcription."
         )
@@ -131,23 +115,13 @@ def call_gnani(
     return result
 
 
-def translate_transcript(text, target):
-    """Translate text using a third-party service."""
-
-    result = GoogleTranslator(
-        source="auto",
-        target=target
-    ).translate(text)
-
-    if not isinstance(result, str) or not result.strip():
-        raise ValueError("Empty translation")
-
-    return result
+language_index = st.selectbox("Interface · इंटरफ़ेस · ఇంటర్‌ఫేస్", range(3),
+                              format_func=("English", "हिन्दी", "తెలుగు").__getitem__)
 
 
-# ==========================================
-# APPLICATION UI
-# ==========================================
+def label(english, hindi, telugu):
+    return (english, hindi, telugu)[language_index]
+
 
 st.title("🛒 BhashaKhata")
 
@@ -167,24 +141,18 @@ st.divider()
 # LANGUAGE SETTINGS
 # ==========================================
 
-st.subheader("1. Language settings")
+st.subheader(label("1. Language settings", "1. भाषा सेटिंग", "1. భాష సెట్టింగులు"))
 
 input_choice = st.selectbox(
-    "Which languages will you speak?",
+    label("Which languages will you speak?", "आप किन भाषाओं में बोलेंगे?", "మీరు ఏ భాషల్లో మాట్లాడతారు?"),
     list(INPUT_OPTIONS.keys()),
     index=0
 )
 
-output_choice = st.selectbox(
-    "Which language should display the result?",
-    list(OUTPUT_OPTIONS.keys()),
-    index=0
-)
-
 format_choice = st.selectbox(
-    "Speech recognition format",
+    label("Speech recognition format", "लिप्यंतरण का प्रारूप", "లిప్యంతరీకరణ ఆకృతి"),
     list(FORMAT_OPTIONS.keys()),
-    index=0
+    index=1
 )
 
 with st.expander("Improve accuracy with shop vocabulary"):
@@ -208,10 +176,10 @@ if len(keyterms) > 200:
 # ==========================================
 
 st.divider()
-st.subheader("2. Record transaction")
+st.subheader(label("2. Record transaction", "2. लेनदेन रिकॉर्ड करें", "2. లావాదేవీని రికార్డ్ చేయండి"))
 
 audio = st.audio_input(
-    "Speak a transaction (maximum 30 seconds)",
+    label("Speak a transaction (maximum 30 seconds)", "लेनदेन बोलें (अधिकतम 30 सेकंड)", "లావాదేవీ చెప్పండి (గరిష్ఠంగా 30 సెకన్లు)"),
     sample_rate=16000
 )
 
@@ -253,13 +221,14 @@ if audio_bytes:
 # ==========================================
 
 if st.button(
-    "Transcribe with Gnani",
+    label("Transcribe with Gnani", "Gnani से लिखें", "Gnaniతో లిప్యంతరీకరించండి"),
     type="primary",
     disabled=audio_bytes is None
 ):
     st.session_state.pop("latest_result", None)
 
     try:
+        api_key = st.secrets["GNANI_API_KEY"]
         duration = audio_duration(audio_bytes)
 
         if duration <= 0:
@@ -278,6 +247,7 @@ if st.button(
                 "Processing speech using Gnani..."
             ):
                 result = call_gnani(
+                    api_key=api_key,
                     audio_bytes=audio_bytes,
                     language_code=INPUT_OPTIONS[input_choice],
                     output_format=FORMAT_OPTIONS[format_choice],
@@ -303,6 +273,8 @@ if st.button(
             else:
                 st.session_state["latest_result"] = {
                     "fingerprint": fingerprint,
+                    "draft_id": uuid4().hex,
+                    "request_key": hashlib.sha256(audio_bytes).hexdigest(),
                     "transcript": transcript,
                     "detected_language": result.get(
                         "detected_language_code"
@@ -316,12 +288,15 @@ if st.button(
                     "Speech transcription completed!"
                 )
 
+    except (KeyError, FileNotFoundError):
+        st.error("Set GNANI_API_KEY in .streamlit/secrets.toml to transcribe.")
+
     except requests.HTTPError as error:
         code = error.response.status_code
-        st.error(
-            f"Gnani API returned HTTP {code}. "
-            "Check your account, settings and credits."
-        )
+        if code in (402, 429):
+            st.error(f"Gnani returned HTTP {code}. Check available credits and usage limits.")
+        else:
+            st.error(f"Gnani returned HTTP {code}. Check your account and settings.")
 
     except requests.RequestException:
         st.error(
@@ -334,7 +309,7 @@ if st.button(
             "The recorded audio could not be read."
         )
 
-    except (ValueError, json.JSONDecodeError):
+    except ValueError:
         st.error(
             "Gnani returned an invalid or "
             "unsuccessful response."
@@ -342,160 +317,119 @@ if st.button(
 
 
 # ==========================================
-# DISPLAY TRANSCRIPTION
+# REVIEW AND LEDGER
 # ==========================================
 
+try:
+    ledger = Ledger(Path(__file__).with_name("bhashakhata.sqlite3"))
+    rows, balances = ledger.snapshot()
+except sqlite3.Error:
+    st.error("Ledger unavailable. Check local storage and retry.")
+    st.stop()
+
+saved_keys = {row["request_key"] for row in rows}
 latest = st.session_state.get("latest_result")
+kind_labels = {
+    None: label("Choose a type", "प्रकार चुनें", "రకాన్ని ఎంచుకోండి"),
+    "cash": label("Cash sale", "नकद बिक्री", "నగదు అమ్మకం"),
+    "credit": label("Credit sale", "उधार बिक्री", "బాకీ అమ్మకం"),
+    "repayment": label("Credit repayment", "उधार चुकौती", "బాకీ చెల్లింపు"),
+}
 
-if latest is not None:
-
-    if latest["fingerprint"] != fingerprint:
-        st.info(
-            "Audio or recognition settings changed. "
-            "Click Transcribe with Gnani again."
-        )
-
+if latest and latest["fingerprint"] == fingerprint:
+    original = latest["transcript"]
+    request_key = latest["request_key"]
+    st.subheader(label("3. Original transcript", "3. मूल प्रतिलेख", "3. అసలు లిప్యంతరీకరణ"))
+    st.text(original)
+    st.download_button("Download original transcript", original, "bhashakhata_transcript.txt")
+    with st.expander("Gnani API information"):
+        st.write("Model · Prisma v3.0")
+        st.text(latest.get("request_id") or "Request ID unavailable")
+        if latest.get("detected_language"):
+            st.text(latest["detected_language"])
+    if request_key in saved_keys:
+        st.info("This recording has already been saved.")
     else:
-        st.divider()
-        st.subheader("3. Original Gnani transcription")
-
-        original = latest["transcript"]
-
-        st.text_area(
-            "Recognized speech",
-            value=original,
-            height=130,
-            disabled=True
-        )
-
-        language = latest.get("detected_language")
-
-        if language:
-            st.caption(
-                f"Reported transcript language: {language}"
-            )
-
-        st.caption(
-            "The language label may represent the "
-            "dominant script, not every spoken language."
-        )
-
-        # ==================================
-        # CHOOSE OUTPUT LANGUAGE
-        # ==================================
-
-        st.divider()
-        st.subheader("4. Selected output language")
-
-        target = OUTPUT_OPTIONS[output_choice]
-
-        if "translation_cache" not in st.session_state:
-            st.session_state["translation_cache"] = {}
-
-        cache = st.session_state["translation_cache"]
-
-        cache_key = (original, target)
-
-        displayed_text = original
-        output_ready = True
-
-        if target is not None:
-
-            st.info(
-                "Translation uses a third-party service. "
-                "Use fictional or consented data only."
-            )
-
-            if cache_key not in cache:
-                if st.button(
-                    "Translate to " + output_choice
-                ):
-                    try:
-                        with st.spinner(
-                            "Translating..."
-                        ):
-                            cache[cache_key] = (
-                                translate_transcript(
-                                    original,
-                                    target
-                                )
-                            )
-
-                        st.success("Translation completed.")
-
-                    except Exception:
-                        st.error(
-                            "Translation failed. "
-                            "Try again or use the "
-                            "original transcript."
-                        )
-
-            if cache_key in cache:
-                displayed_text = cache[cache_key]
+        suggestions = extract(original)
+        draft = latest["draft_id"]
+        with st.form(f"transaction_{draft}", clear_on_submit=False):
+            st.subheader(label("4. Review transaction", "4. लेनदेन जाँचें", "4. లావాదేవీని తనిఖీ చేయండి"))
+            customer = st.text_input(label("Customer", "ग्राहक", "కస్టమర్"), suggestions.get("customer", ""))
+            kind = st.selectbox(label("Transaction type", "लेनदेन प्रकार", "లావాదేవీ రకం"),
+                                [None, *KINDS], index=[None, *KINDS].index(suggestions.get("kind")),
+                                format_func=kind_labels.__getitem__)
+            product = st.text_input(label("Product (sales)", "उत्पाद (बिक्री)", "ఉత్పత్తి (అమ్మకం)"),
+                                    suggestions.get("product", ""))
+            quantity = st.text_input(label("Quantity (sales)", "मात्रा (बिक्री)", "పరిమాణం (అమ్మకం)"),
+                                     suggestions.get("quantity", ""))
+            amount = st.text_input(label("Total amount in rupees", "कुल राशि रुपये में", "మొత్తం రూపాయల్లో"),
+                                   suggestions.get("amount", ""))
+            confirmed = st.checkbox(label("I verified these details", "मैंने विवरण जाँच लिए हैं",
+                                          "నేను వివరాలను తనిఖీ చేశాను"))
+            submit = st.form_submit_button(label("Confirm and save", "पुष्टि करके सहेजें", "నిర్ధారించి సేవ్ చేయండి"))
+            cancel = st.form_submit_button(label("Cancel", "रद्द करें", "రద్దు చేయండి"))
+        if cancel:
+            st.session_state.pop("latest_result")
+            st.rerun()
+        if submit:
+            if not confirmed:
+                st.warning("Verify the details and tick the confirmation box.")
             else:
-                output_ready = False
-                st.caption(
-                    "Click Translate to generate "
-                    "the selected language."
-                )
+                try:
+                    inserted = ledger.save(request_key, original, customer, product, quantity, amount, kind)
+                except ValueError as error:
+                    if str(error) == "amount":
+                        st.error("Enter a positive rupee amount with up to two decimal places.")
+                    else:
+                        st.error("Enter a customer and transaction type. Sales require a product and positive quantity.")
+                except sqlite3.Error:
+                    st.error("Save failed. Your draft is still available. Retry after checking storage.")
+                else:
+                    st.session_state["ledger_notice"] = "Transaction saved." if inserted else "Already saved."
+                    st.rerun()
+elif latest:
+    st.info("Audio or settings changed. Transcribe again to review this recording.")
 
-        # ==================================
-        # EDIT AND EXPORT DISPLAYED TEXT
-        # ==================================
-
-        if output_ready:
-
-            editor_id = hashlib.sha256(
-                (
-                    latest["fingerprint"] +
-                    str(target)
-                ).encode("utf-8")
-            ).hexdigest()[:16]
-
-            editor_key = "editor_" + editor_id
-
-            if editor_key not in st.session_state:
-                st.session_state[editor_key] = displayed_text
-
-            edited_text = st.text_area(
-                "Review or edit displayed text",
-                key=editor_key,
-                height=130
-            )
-
-            st.download_button(
-                "Download reviewed text",
-                data=edited_text.encode("utf-8"),
-                file_name="bhashakhata_transcript.txt",
-                mime="text/plain"
-            )
-
-            st.warning(
-                "Always verify names, quantities "
-                "and rupee amounts against the audio. "
-                "Translated text is not a verified "
-                "financial transaction."
-            )
-
-        with st.expander("Gnani API information"):
-            st.write("Model: Prisma v3.0")
-            st.write(
-                "Request ID:",
-                latest.get("request_id") or "Not provided"
-            )
-
-        st.caption(
-            "Milestone 2: transcription and language "
-            "display only. No ledger transaction is saved."
-        )
+notice = st.session_state.pop("ledger_notice", None)
+if notice:
+    st.success(notice)
 
 
-# ==========================================
-# FOOTER
-# ==========================================
+def rupees(paise):
+    whole, fraction = divmod(abs(paise), 100)
+    sign = "-" if paise < 0 else ""
+    return f"{sign}₹{whole:,}.{fraction:02d}"
 
-st.divider()
 
-st.caption(
-    "BhashaKhata | Powered by Gnani Prisma v3.0"
-)
+st.subheader(label("Customer balances", "ग्राहक शेष", "కస్టమర్ బాకీలు"))
+if balances:
+    st.dataframe([
+        {label("Customer", "ग्राहक", "కస్టమర్"): name,
+         label("Balance", "शेष", "బాకీ"): rupees(balance)}
+        for name, balance in balances
+    ], hide_index=True)
+else:
+    st.caption(label("No credit activity yet.", "अभी कोई उधार गतिविधि नहीं।", "ఇంకా బాకీ లావాదేవీలు లేవు."))
+
+st.subheader(label("Transaction history", "लेनदेन इतिहास", "లావాదేవీల చరిత్ర"))
+reversed_ids = {row["reversal_of"] for row in rows}
+for row in rows:
+    entry_id = row["id"]
+    with st.expander(f'{row["created_at"]} UTC · {row["customer"]} · {kind_labels[row["kind"]]}'):
+        st.text(f'{rupees(row["paise"])} · {row["quantity"]} {row["product"]}'.strip())
+        st.text(entry_id)
+        st.text(row["transcript"])
+        if row["reversal_of"]:
+            st.text(f'Reversal of {row["reversal_of"]}')
+        elif entry_id in reversed_ids:
+            st.caption("Reversed")
+        elif st.button("Reverse this entry", key=f"reverse_{entry_id}"):
+            try:
+                ledger.reverse(entry_id)
+            except sqlite3.Error:
+                st.error("Reversal failed. Check storage and retry.")
+            else:
+                st.session_state["ledger_notice"] = "Reversal recorded."
+                st.rerun()
+
+st.caption("BhashaKhata | Powered by Gnani Prisma v3.0")
