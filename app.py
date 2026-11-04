@@ -9,9 +9,9 @@ import streamlit as st
 from deep_translator import GoogleTranslator
 
 
-# -----------------------------------------
-# 1. CONFIGURATION
-# -----------------------------------------
+# ==========================================
+# CONFIGURATION
+# ==========================================
 
 st.set_page_config(
     page_title="BhashaKhata",
@@ -21,84 +21,84 @@ st.set_page_config(
 
 GNANI_URL = "https://api.vachana.ai/stt/v3"
 
-INPUT_LANGUAGES = {
+INPUT_OPTIONS = {
     "Hindi + Telugu + English": "hi-IN,te-IN,en-IN",
     "Telugu + English": "te-IN,en-IN",
     "Hindi + English": "hi-IN,en-IN",
     "Hindi + Telugu": "hi-IN,te-IN",
-    "Auto-detect": "indic-auto",
-    "Only Telugu": "te-IN",
-    "Only Hindi": "hi-IN",
-    "Only English": "en-IN",
+    "Telugu only": "te-IN",
+    "Hindi only": "hi-IN",
+    "English only": "en-IN",
+    "Automatic detection": "indic-auto"
 }
 
-OUTPUT_LANGUAGES = {
+OUTPUT_OPTIONS = {
+    "Original mixed-language transcript": None,
     "English": "en",
-    "తెలుగు (Telugu)": "te",
-    "हिन्दी (Hindi)": "hi",
-    "Original mixed-language text": None,
+    "Telugu (తెలుగు)": "te",
+    "Hindi (हिन्दी)": "hi"
 }
 
-TRANSCRIPTION_STYLES = {
-    "Mixed scripts (recommended for testing)": "codemix",
-    "Numbers as digits (accounting)": "transcribe",
-    "English letters (romanized)": "transliterate",
+FORMAT_OPTIONS = {
+    "Mixed scripts (codemix)": "codemix",
+    "Numbers and currency (transcribe)": "transcribe"
 }
 
-DEFAULT_KEYTERMS = (
-    "rice, sugar, milk, Ramesh, "
-    "రమేష్, బియ్యం, బాకీ, రూపాయలు, "
-    "रमेश, चावल, उधार, रुपये, "
-    "credit, payment"
+DEFAULT_TERMS = (
+    "Ramesh, rice, sugar, milk, "
+    "బాకీ, బియ్యం, రూపాయలు, "
+    "उधार, रुपये, चावल"
 )
 
 
-# -----------------------------------------
-# 2. READ PRIVATE API KEY
-# -----------------------------------------
+# ==========================================
+# API KEY
+# ==========================================
 
 try:
-    GNANI_API_KEY = st.secrets["GNANI_API_KEY"]
+    API_KEY = st.secrets["GNANI_API_KEY"]
 except Exception:
     st.error(
-        "Gnani API key not found. "
-        "Add GNANI_API_KEY to "
-        ".streamlit/secrets.toml."
+        "Gnani API key is missing. "
+        "Check .streamlit/secrets.toml"
     )
     st.stop()
 
 
-# -----------------------------------------
-# 3. HELPER FUNCTIONS
-# -----------------------------------------
+# ==========================================
+# FUNCTIONS
+# ==========================================
 
-def get_audio_duration(audio_bytes):
-    """Return duration of a WAV recording in seconds."""
+def audio_duration(audio_bytes):
+    """Read duration of a WAV recording."""
     with wave.open(io.BytesIO(audio_bytes), "rb") as wav:
-        return wav.getnframes() / wav.getframerate()
+        return (
+            wav.getnframes() /
+            wav.getframerate()
+        )
 
 
-def transcribe_audio(
+def call_gnani(
     audio_bytes,
     language_code,
     output_format,
     keyterms
 ):
-    """Send one short recording to Gnani Prisma v3.0."""
+    """Transcribe audio using Prisma v3.0."""
 
-    payload = {
+    data = {
         "model": "prisma-v3.0",
         "language_code": language_code,
         "format": output_format,
         "topic": (
-            "Indian Kirana shop transactions, "
-            "customer credit, repayments, "
-            "product quantities and rupee amounts"
-        ),
+            "Indian Kirana shop accounting, "
+            "customer credit, cash payments, "
+            "products, quantities and rupees"
+        )
     }
 
     if keyterms:
-        payload["keyterms"] = json.dumps(
+        data["keyterms"] = json.dumps(
             keyterms[:200],
             ensure_ascii=False
         )
@@ -106,7 +106,7 @@ def transcribe_audio(
     response = requests.post(
         GNANI_URL,
         headers={
-            "X-API-Key-ID": GNANI_API_KEY
+            "X-API-Key-ID": API_KEY
         },
         files={
             "audio_file": (
@@ -115,8 +115,8 @@ def transcribe_audio(
                 "audio/wav"
             )
         },
-        data=payload,
-        timeout=(10, 60)
+        data=data,
+        timeout=60
     )
 
     response.raise_for_status()
@@ -125,31 +125,29 @@ def transcribe_audio(
 
     if result.get("success") is not True:
         raise ValueError(
-            "Gnani did not confirm successful transcription."
+            "Gnani did not complete transcription."
         )
 
     return result
 
 
-def translate_text(text, target_language):
-    """
-    Prototype translation using an unofficial
-    Google Translate interface.
+def translate_transcript(text, target):
+    """Translate text using a third-party service."""
 
-    Do not use translated text as an authoritative
-    financial record.
-    """
-    translator = GoogleTranslator(
+    result = GoogleTranslator(
         source="auto",
-        target=target_language
-    )
+        target=target
+    ).translate(text)
 
-    return translator.translate(text)
+    if not isinstance(result, str) or not result.strip():
+        raise ValueError("Empty translation")
+
+    return result
 
 
-# -----------------------------------------
-# 4. APPLICATION HEADER
-# -----------------------------------------
+# ==========================================
+# APPLICATION UI
+# ==========================================
 
 st.title("🛒 BhashaKhata")
 
@@ -158,135 +156,132 @@ st.write(
 )
 
 st.caption(
-    "Speak in Telugu, Hindi, English, "
+    "Speak in Hindi, Telugu, English, "
     "or a mixture of these languages."
 )
 
 st.divider()
 
 
-# -----------------------------------------
-# 5. LANGUAGE SETTINGS
-# -----------------------------------------
+# ==========================================
+# LANGUAGE SETTINGS
+# ==========================================
 
-st.subheader("1. Choose your languages")
+st.subheader("1. Language settings")
 
 input_choice = st.selectbox(
-    "Languages you will speak",
-    list(INPUT_LANGUAGES.keys()),
+    "Which languages will you speak?",
+    list(INPUT_OPTIONS.keys()),
     index=0
 )
 
 output_choice = st.selectbox(
-    "Language in which you want the output",
-    list(OUTPUT_LANGUAGES.keys()),
+    "Which language should display the result?",
+    list(OUTPUT_OPTIONS.keys()),
     index=0
 )
 
-style_choice = st.selectbox(
-    "Gnani transcription style",
-    list(TRANSCRIPTION_STYLES.keys()),
+format_choice = st.selectbox(
+    "Speech recognition format",
+    list(FORMAT_OPTIONS.keys()),
     index=0
 )
 
-st.caption(
-    "Changing the output language after transcription "
-    "does not call Gnani again."
-)
-
-
-# -----------------------------------------
-# 6. OPTIONAL ACCURACY HINTS
-# -----------------------------------------
-
-with st.expander("Improve recognition with shop vocabulary"):
-    terms_text = st.text_input(
-        "Customer names and product words (comma-separated)",
-        value=DEFAULT_KEYTERMS
-    )
-
-    st.caption(
-        "Use relevant names and product terms. "
-        "Keyterms are hints, not guaranteed corrections."
+with st.expander("Improve accuracy with shop vocabulary"):
+    terms_input = st.text_input(
+        "Important customer names and product words",
+        value=DEFAULT_TERMS
     )
 
 keyterms = [
     term.strip()
-    for term in terms_text.split(",")
+    for term in terms_input.split(",")
     if term.strip()
 ]
 
+if len(keyterms) > 200:
+    st.warning("Only the first 200 keyterms will be sent.")
 
-# -----------------------------------------
-# 7. RECORD AUDIO
-# -----------------------------------------
 
-st.subheader("2. Record a transaction")
+# ==========================================
+# RECORD AUDIO
+# ==========================================
+
+st.divider()
+st.subheader("2. Record transaction")
 
 audio = st.audio_input(
-    "Speak for up to 30 seconds",
+    "Speak a transaction (maximum 30 seconds)",
     sample_rate=16000
 )
 
-audio_bytes = audio.getvalue() if audio else None
+audio_bytes = (
+    audio.getvalue()
+    if audio is not None
+    else None
+)
 
 if audio_bytes:
     st.audio(audio_bytes, format="audio/wav")
 
 
-# -----------------------------------------
-# 8. BUILD TRANSCRIPTION SIGNATURE
-# -----------------------------------------
+# ==========================================
+# BUILD REQUEST FINGERPRINT
+# ==========================================
 
-signature = None
+fingerprint = None
 
 if audio_bytes:
-    audio_hash = hashlib.sha256(
-        audio_bytes
+    settings = {
+        "language": INPUT_OPTIONS[input_choice],
+        "format": FORMAT_OPTIONS[format_choice],
+        "keyterms": keyterms[:200]
+    }
+
+    fingerprint = hashlib.sha256(
+        audio_bytes +
+        json.dumps(
+            settings,
+            sort_keys=True,
+            ensure_ascii=False
+        ).encode("utf-8")
     ).hexdigest()
 
-    signature = (
-        audio_hash,
-        INPUT_LANGUAGES[input_choice],
-        TRANSCRIPTION_STYLES[style_choice],
-        tuple(keyterms[:200])
-    )
 
-
-# -----------------------------------------
-# 9. CALL GNANI
-# -----------------------------------------
+# ==========================================
+# TRANSCRIBE
+# ==========================================
 
 if st.button(
-    "🎤 Transcribe with Gnani",
+    "Transcribe with Gnani",
     type="primary",
     disabled=audio_bytes is None
 ):
-    # Never show an old result as a new result.
     st.session_state.pop("latest_result", None)
 
     try:
-        duration = get_audio_duration(audio_bytes)
+        duration = audio_duration(audio_bytes)
 
-        if duration > 30:
+        if duration <= 0:
+            st.error("Your recording is empty.")
+
+        elif duration > 30:
             st.error(
-                "Recording is longer than 30 seconds. "
-                "Please record a shorter command."
+                "Please record a clip shorter than 30 seconds."
             )
-
-        elif duration <= 0:
-            st.error("The recording is empty.")
 
         elif len(audio_bytes) > 5 * 1024 * 1024:
             st.error("Audio file is too large.")
 
         else:
-            with st.spinner("Gnani is transcribing..."):
-                result = transcribe_audio(
-                    audio_bytes,
-                    INPUT_LANGUAGES[input_choice],
-                    TRANSCRIPTION_STYLES[style_choice],
-                    keyterms
+            with st.spinner(
+                "Processing speech using Gnani..."
+            ):
+                result = call_gnani(
+                    audio_bytes=audio_bytes,
+                    language_code=INPUT_OPTIONS[input_choice],
+                    output_format=FORMAT_OPTIONS[format_choice],
+                    keyterms=keyterms
                 )
 
             transcript = result.get(
@@ -295,15 +290,21 @@ if st.button(
 
             if not transcript:
                 st.warning(
-                    "No speech was recognized. "
-                    "Try speaking more clearly."
+                    "No speech recognized. "
+                    "Please record again."
+                )
+
+            elif result.get("truncated"):
+                st.warning(
+                    "Gnani truncated this transcript. "
+                    "Try a shorter recording."
                 )
 
             else:
                 st.session_state["latest_result"] = {
-                    "signature": signature,
+                    "fingerprint": fingerprint,
                     "transcript": transcript,
-                    "language": result.get(
+                    "detected_language": result.get(
                         "detected_language_code"
                     ),
                     "request_id": result.get(
@@ -312,179 +313,189 @@ if st.button(
                 }
 
                 st.success(
-                    "Transcription completed successfully!"
+                    "Speech transcription completed!"
                 )
 
     except requests.HTTPError as error:
-        status = error.response.status_code
+        code = error.response.status_code
         st.error(
-            f"Gnani returned HTTP {status}. "
-            "Check your API access, settings and credits."
+            f"Gnani API returned HTTP {code}. "
+            "Check your account, settings and credits."
         )
 
-    except requests.RequestException as error:
+    except requests.RequestException:
         st.error(
-            f"Network error: {type(error).__name__}. "
-            "Please check your connection."
+            "Network error while contacting Gnani. "
+            "Check your internet connection."
         )
 
     except (wave.Error, EOFError, ZeroDivisionError):
         st.error(
-            "Could not read the WAV recording."
+            "The recorded audio could not be read."
         )
 
     except (ValueError, json.JSONDecodeError):
         st.error(
-            "Gnani returned an invalid or unsuccessful result."
+            "Gnani returned an invalid or "
+            "unsuccessful response."
         )
 
 
-# -----------------------------------------
-# 10. SHOW ORIGINAL TRANSCRIPT
-# -----------------------------------------
+# ==========================================
+# DISPLAY TRANSCRIPTION
+# ==========================================
 
 latest = st.session_state.get("latest_result")
 
-if latest:
-    if latest["signature"] != signature:
+if latest is not None:
+
+    if latest["fingerprint"] != fingerprint:
         st.info(
-            "Recording or recognition settings changed. "
-            "Click Transcribe with Gnani to process them."
+            "Audio or recognition settings changed. "
+            "Click Transcribe with Gnani again."
         )
 
     else:
-        original_text = latest["transcript"]
-
         st.divider()
-        st.subheader("3. Transcription result")
+        st.subheader("3. Original Gnani transcription")
 
-        st.markdown("**Original Gnani transcription**")
+        original = latest["transcript"]
 
-        st.info(original_text)
+        st.text_area(
+            "Recognized speech",
+            value=original,
+            height=130,
+            disabled=True
+        )
 
-        if latest.get("language"):
+        language = latest.get("detected_language")
+
+        if language:
             st.caption(
-                "Reported script/language: "
-                + latest["language"]
+                f"Reported transcript language: {language}"
             )
 
         st.caption(
-            "The reported language code may describe "
-            "only the dominant script, not every "
-            "language spoken."
+            "The language label may represent the "
+            "dominant script, not every spoken language."
         )
 
-        # ---------------------------------
-        # 11. SELECTED OUTPUT LANGUAGE
-        # ---------------------------------
+        # ==================================
+        # CHOOSE OUTPUT LANGUAGE
+        # ==================================
 
-        st.subheader("4. Your chosen language")
+        st.divider()
+        st.subheader("4. Selected output language")
 
-        target = OUTPUT_LANGUAGES[output_choice]
+        target = OUTPUT_OPTIONS[output_choice]
 
-        display_text = original_text
-        translation_ok = True
+        if "translation_cache" not in st.session_state:
+            st.session_state["translation_cache"] = {}
+
+        cache = st.session_state["translation_cache"]
+
+        cache_key = (original, target)
+
+        displayed_text = original
+        output_ready = True
 
         if target is not None:
-            if "translations" not in st.session_state:
-                st.session_state["translations"] = {}
 
-            cache_key = (
-                original_text,
-                target
+            st.info(
+                "Translation uses a third-party service. "
+                "Use fictional or consented data only."
             )
 
-            translations = st.session_state["translations"]
+            if cache_key not in cache:
+                if st.button(
+                    "Translate to " + output_choice
+                ):
+                    try:
+                        with st.spinner(
+                            "Translating..."
+                        ):
+                            cache[cache_key] = (
+                                translate_transcript(
+                                    original,
+                                    target
+                                )
+                            )
 
-            if cache_key not in translations:
-                try:
-                    with st.spinner(
-                        "Translating the transcript..."
-                    ):
-                        translated = translate_text(
-                            original_text,
-                            target
+                        st.success("Translation completed.")
+
+                    except Exception:
+                        st.error(
+                            "Translation failed. "
+                            "Try again or use the "
+                            "original transcript."
                         )
 
-                    if not translated:
-                        raise ValueError("Empty translation")
-
-                    translations[cache_key] = translated
-
-                except Exception:
-                    translation_ok = False
-
-                    st.warning(
-                        "Translation is unavailable. "
-                        "The original transcript is shown below. "
-                        "No new Gnani request was made."
-                    )
-
-            if cache_key in translations:
-                display_text = translations[cache_key]
+            if cache_key in cache:
+                displayed_text = cache[cache_key]
             else:
-                translation_ok = False
-
-        if translation_ok:
-            output_id = hashlib.sha256(
-                (original_text + str(target)).encode(
-                    "utf-8"
+                output_ready = False
+                st.caption(
+                    "Click Translate to generate "
+                    "the selected language."
                 )
+
+        # ==================================
+        # EDIT AND EXPORT DISPLAYED TEXT
+        # ==================================
+
+        if output_ready:
+
+            editor_id = hashlib.sha256(
+                (
+                    latest["fingerprint"] +
+                    str(target)
+                ).encode("utf-8")
             ).hexdigest()[:16]
 
-            st.text_area(
-                "Output text (editable)",
-                value=display_text,
-                height=120,
-                key=f"output_{output_id}"
+            editor_key = "editor_" + editor_id
+
+            if editor_key not in st.session_state:
+                st.session_state[editor_key] = displayed_text
+
+            edited_text = st.text_area(
+                "Review or edit displayed text",
+                key=editor_key,
+                height=130
             )
 
-            final_text = st.session_state[
-                f"output_{output_id}"
-            ]
-
             st.download_button(
-                "Download this text",
-                data=final_text.encode("utf-8"),
+                "Download reviewed text",
+                data=edited_text.encode("utf-8"),
                 file_name="bhashakhata_transcript.txt",
                 mime="text/plain"
             )
 
-        else:
-            st.write(original_text)
-
-        st.warning(
-            "Review customer names, quantities and "
-            "rupee amounts against the recording. "
-            "Translation can change their meaning."
-        )
-
-        with st.expander("API details"):
-            st.write(
-                "Model: prisma-v3.0"
+            st.warning(
+                "Always verify names, quantities "
+                "and rupee amounts against the audio. "
+                "Translated text is not a verified "
+                "financial transaction."
             )
+
+        with st.expander("Gnani API information"):
+            st.write("Model: Prisma v3.0")
             st.write(
                 "Request ID:",
                 latest.get("request_id") or "Not provided"
             )
 
         st.caption(
-            "Prototype only: nothing is saved "
-            "to a financial ledger yet."
+            "Milestone 2: transcription and language "
+            "display only. No ledger transaction is saved."
         )
 
 
-# -----------------------------------------
-# 12. FOOTER
-# -----------------------------------------
+# ==========================================
+# FOOTER
+# ==========================================
 
 st.divider()
 
 st.caption(
     "BhashaKhata | Powered by Gnani Prisma v3.0"
-)
-
-st.caption(
-    "Prototype translation uses a third-party service. "
-    "Use fictional or consented recordings only."
 )
