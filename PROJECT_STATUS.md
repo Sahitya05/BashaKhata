@@ -33,3 +33,22 @@
 - Final command: python -m pytest -q. Result: 59 passed. The preceding run found a draft widget reset after amount correction, fixed and verified by the final run.
 - The mocked four-recording flow reached INR 200, 280, 180 and 0 with all four entries preserved. No live calls were made.
 - The local milestone is ready for commit. No push, public deployment, post or submission was performed.
+
+## UI redesign, November 4
+
+- Added a custom sage, cream and burgundy dashboard, animated decorative voice illustration, balance cards, interactive transaction-type guide, and three-stage review navigation.
+- Added responsive narrow-screen CSS and reduced-motion support. No customer content is interpolated into unescaped HTML.
+- Validation: python -m pytest -q completed with 59 passed. git diff --check passed. Browser visual review remains pending.
+- Changes are local and have not been pushed.
+
+## Reference layout refinement
+
+- Reorganized the dashboard into top navigation, four balance cards, a two-column recording and guidance section, and recent transactions below. Dashboard language controls are connected to recording settings.
+- Uses live ledger values. Browser visual verification remains pending.
+
+## Dimensional dashboard redesign
+
+- Rebuilt dashboard proportions with a 1480px maximum layout, raised balance cards, animated CSS microphone sculpture, layered guide cards, and tactile button states using the requested palette.
+- Browser-verified the live dashboard at 1440px and 390px widths. The mobile page had no horizontal overflow. Fixed a stale presentation-module import found during live inspection.
+- Regression suite: 59 passed. git diff --check passed. No live speech or translation calls were needed for UI validation.
+- Changes remain local; no push performed.

@@ -1,5 +1,15 @@
 """Built-in UI resources: English, Hindi, Telugu."""
 TEXT = {
+ "shop_glance": ("Your shop, at a glance", "आपकी दुकान, एक नज़र में", "మీ దుకాణం, ఒక్క చూపులో"),
+ "speak_review_save": ("Speak. Review. Save.", "बोलें। जाँचें। सहेजें।", "చెప్పండి. తనిఖీ చేయండి. సేవ్ చేయండి."),
+ "how_it_works": ("How it works", "यह कैसे काम करता है", "ఇది ఎలా పనిచేస్తుంది"),
+ "guide_title": ("How does it work? Explore transaction types", "यह कैसे काम करता है? लेनदेन के प्रकार देखें", "ఇది ఎలా పనిచేస్తుంది? లావాదేవీల రకాలు తెలుసుకోండి"),
+ "guide_intro": ("Choose a type to see how it changes the balance. This guide does not create a transaction.", "शेष पर असर देखने के लिए प्रकार चुनें। यह मार्गदर्शिका लेनदेन नहीं बनाती।", "బాకీ ఎలా మారుతుందో చూడటానికి రకాన్ని ఎంచుకోండి. ఈ మార్గదర్శిని లావాదేవీ సృష్టించదు."),
+ "hero": ("Speak a sale or payment. Check the details before saving.", "बिक्री या भुगतान बोलें। सहेजने से पहले विवरण जाँचें।", "అమ్మకం లేదా చెల్లింపు గురించి చెప్పండి. సేవ్ చేసే ముందు వివరాలు తనిఖీ చేయండి."),
+ "recent": ("Recent transactions", "हाल के लेनदेन", "ఇటీవలి లావాదేవీలు"),
+ "step_record": ("Record one sale or payment", "एक बिक्री या भुगतान रिकॉर्ड करें", "ఒక అమ్మకం లేదా చెల్లింపు రికార్డ్ చేయండి"),
+ "step_review": ("Check the account, type and amount", "खाता, प्रकार और राशि जाँचें", "ఖాతా, రకం, మొత్తం తనిఖీ చేయండి"),
+ "step_confirm": ("Check the balance change and confirm", "शेष में बदलाव देखकर पुष्टि करें", "బాకీ మార్పును చూసి నిర్ధారించండి"),
  "sample_explanation": ("Sample: Asha bought groceries worth ₹200 on credit.", "नमूना: आशा ने ₹200 का किराना उधार लिया।", "నమూనా: ఆశ ₹200 విలువైన సరుకును బాకీపై తీసుకున్నారు."),
  "translation_service_busy": ("Translation is temporarily unavailable. Click Translate to retry, or review the original.", "अनुवाद अभी उपलब्ध नहीं है। दोबारा अनुवाद करें या मूल पाठ की जाँच करें।", "అనువాదం తాత్కాలికంగా అందుబాటులో లేదు. మళ్లీ అనువదించండి లేదా అసలు వాక్యాన్ని తనిఖీ చేయండి."),
  "practice": ("Try a sample transaction", "नमूना लेनदेन आज़माएँ", "నమూనా లావాదేవీ ప్రయత్నించండి"),

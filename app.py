@@ -1,5 +1,6 @@
 """BhashaKhata: record -> review -> preview -> explicitly confirm -> append."""
 import csv
+import importlib
 import hashlib
 import hmac
 import io
@@ -16,8 +17,14 @@ from i18n import TEXT, label
 from ledger import Ledger, Transaction, KINDS, EFFECT, amount_paise, rupees
 from speech import INPUT_OPTIONS, transcribe
 from translation import AzureTranslator, GeminiTranslator
+import design
+
+# Presentation helpers carry no application state and can safely refresh on reruns.
+importlib.reload(design)
+from design import install_styles, steps, voice_sculpture, guide_cards, balance_card
 
 st.set_page_config(page_title="BhashaKhata", page_icon="🛒", layout="wide")
+install_styles()
 
 def secret(key, default=""):
     try:
@@ -25,9 +32,7 @@ def secret(key, default=""):
     except FileNotFoundError:
         return default
 
-language = st.sidebar.selectbox("Output language · भाषा · భాష", ["en", "hi", "te"],
-                               format_func={"en": "English", "hi": "हिन्दी", "te": "తెలుగు"}.get,
-                               key="output_language")
+language = st.session_state.get("output_language", "en")
 def t(key):
     return label(key if key in TEXT else "translation_unavailable", language)
 
@@ -53,10 +58,18 @@ except sqlite3.Error:
     st.error(t("error"))
     st.stop()
 
-st.title("🛒 BhashaKhata")
-st.caption("Speak Your Business. Track Every Rupee.")
-st.sidebar.caption(t("local"))
-page = st.sidebar.radio("BhashaKhata", ["dashboard", "record", "ledger", "reports"], format_func=t, key="page")
+with st.container(key="topbar"):
+    brand, navigation = st.columns([1, 3], vertical_alignment="center")
+    brand.markdown("### BhashaKhata")
+    with navigation:
+        page = st.radio("BhashaKhata", ["dashboard", "record", "ledger", "reports"],
+                        format_func=t, key="page", horizontal=True, label_visibility="collapsed")
+
+if page != "dashboard":
+    st.selectbox("Output language · भाषा · భాష", ["en", "hi", "te"],
+                 format_func={"en": "English", "hi": "हिन्दी", "te": "తెలుగు"}.get,
+                 key="output_language")
+
 st.session_state.setdefault("audio_epoch", 0)
 st.session_state.setdefault("speech_cache", {})
 st.session_state.setdefault("translation_cache", {})
@@ -79,6 +92,14 @@ def new_draft(result, source):
     fields = extract(result["transcript"])
     for field in ("customer", "kind", "product", "quantity", "unit", "amount"):
         st.session_state["draft_" + field] = fields.get(field, None if field == "kind" else "")
+
+def open_sample():
+    new_draft({
+        "transcript": "Asha bought groceries worth 200 rupees on credit.",
+        "request_key": "manual:" + uuid4().hex,
+        "practice": True,
+    }, "en-IN")
+    st.session_state.page = "record"
 
 def failure(exc):
     st.error(t("error"))
@@ -109,16 +130,48 @@ if notice := st.session_state.pop("notice", None):
     st.success(t(notice))
 
 if page == "dashboard":
+    st.header(t("shop_glance"))
+    st.caption(t("hero"))
     totals = ledger.totals()
-    for col, bucket in zip(st.columns(4), ("receivable", "payable", "cash", "loan")):
-        col.metric(t(bucket), rupees(totals[bucket]))
-    st.caption(f'{t("account")}: {len(accounts)}')
+    for index, (col, bucket, symbol) in enumerate(zip(st.columns(4), ("receivable", "payable", "cash", "loan"), ("↙", "↗", "₹", "⇄"))):
+        with col:
+            balance_card(t(bucket), rupees(totals[bucket]), symbol, index)
+
     def go_record():
         st.session_state.page = "record"
-    st.button(t("new"), type="primary", on_click=go_record)
-    show_rows(ledger.history()[:10])
+
+    recorder, guide = st.columns([1.7, 1], gap="large")
+    with recorder, st.container(border=True, key="record_panel"):
+        voice_sculpture()
+        st.subheader(t("speak_review_save"))
+        speech_language, display_language = st.columns(2)
+        speech_language.selectbox(t("input"), list(INPUT_OPTIONS), key="input_language")
+        display_language.selectbox("Output language · भाषा · భాష", ["en", "hi", "te"],
+                                   format_func={"en": "English", "hi": "हिन्दी", "te": "తెలుగు"}.get,
+                                   key="output_language")
+        voice, sample = st.columns(2)
+        voice.button(t("new"), type="primary", on_click=go_record, width="stretch")
+        sample.button(t("practice"), on_click=open_sample, width="stretch")
+        st.caption(t("hero"))
+    with guide, st.container(border=True, key="how_panel"):
+        st.subheader(t("how_it_works"))
+        guide_cards([t(key) for key in ("step_record", "step_review", "step_confirm")])
+        with st.expander(t("guide_title")):
+            example_kind = st.selectbox(t("kind"), ["credit", "repayment", "cash", "borrow"], format_func=t, key="guide_kind")
+            st.write(t("hint_" + example_kind))
+    with st.container(border=True, key="recent_panel"):
+        st.subheader(t("recent"))
+        show_rows(ledger.history()[:10])
 
 elif page == "record":
+    st.header(t("record"))
+    if st.session_state.get("prepared"):
+        step, step_label = 3, "step_confirm"
+    elif st.session_state.get("pending"):
+        step, step_label = 2, "step_review"
+    else:
+        step, step_label = 1, "step_record"
+    steps(step, [t("step_record"), t("step_review"), t("step_confirm")])
     input_choice = st.selectbox(t("input"), list(INPUT_OPTIONS), key="input_language")
     input_code = INPUT_OPTIONS[input_choice]
     if not st.session_state.get("pending"):
@@ -139,13 +192,7 @@ elif page == "record":
                 new_draft({"transcript": manual, "request_key": "manual:" + uuid4().hex}, input_code)
                 st.rerun()
         st.caption(t("practice_help"))
-        if st.button(t("practice")):
-            new_draft({
-                "transcript": "Asha bought groceries worth 200 rupees on credit.",
-                "request_key": "manual:" + uuid4().hex,
-                "practice": True,
-            }, "en-IN")
-            st.rerun()
+        st.button(t("practice"), on_click=open_sample)
     pending = st.session_state.get("pending")
     if pending:
         with st.expander(t("original"), expanded=True):
@@ -272,6 +319,7 @@ elif page == "record":
         st.rerun()
 
 elif page == "ledger":
+    st.header(t("ledger"))
     search = st.text_input(t("search"))
     matches = [a for a in accounts if search.casefold() in a["name"].casefold()]
     if matches or (not search and ledger.history()):
@@ -301,6 +349,7 @@ elif page == "ledger":
         st.info(t("empty"))
 
 elif page == "reports":
+    st.header(t("reports"))
     start = st.date_input(t("start"), value=date(2020, 1, 1))
     end = st.date_input(t("end"), value=date.today())
     rows = [r for r in ledger.history() if str(start) <= r["created_at"][:10] <= str(end)]
