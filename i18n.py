@@ -1,5 +1,17 @@
 """Built-in UI resources: English, Hindi, Telugu."""
 TEXT = {
+ "sample_explanation": ("Sample: Asha bought groceries worth ₹200 on credit.", "नमूना: आशा ने ₹200 का किराना उधार लिया।", "నమూనా: ఆశ ₹200 విలువైన సరుకును బాకీపై తీసుకున్నారు."),
+ "translation_service_busy": ("Translation is temporarily unavailable. Click Translate to retry, or review the original.", "अनुवाद अभी उपलब्ध नहीं है। दोबारा अनुवाद करें या मूल पाठ की जाँच करें।", "అనువాదం తాత్కాలికంగా అందుబాటులో లేదు. మళ్లీ అనువదించండి లేదా అసలు వాక్యాన్ని తనిఖీ చేయండి."),
+ "practice": ("Try a sample transaction", "नमूना लेनदेन आज़माएँ", "నమూనా లావాదేవీ ప్రయత్నించండి"),
+ "practice_help": ("Open a fictional ₹200 credit sale to review. You can cancel after the preview.", "जाँचने के लिए ₹200 की काल्पनिक उधार बिक्री खोलें। पूर्वावलोकन के बाद रद्द कर सकते हैं।", "తనిఖీ కోసం ₹200 కల్పిత బాకీ అమ్మకాన్ని తెరవండి. ప్రివ్యూ తర్వాత రద్దు చేయవచ్చు."),
+ "hint_credit": ("Goods now, payment later. The customer owes the shop more.", "सामान अभी, भुगतान बाद में। ग्राहक का उधार बढ़ता है।", "సరుకు ఇప్పుడు, చెల్లింపు తర్వాత. కస్టమర్ బాకీ పెరుగుతుంది."),
+ "hint_cash": ("The customer pays for this purchase immediately. No new balance is owed.", "ग्राहक अभी भुगतान करता है। नया उधार नहीं बनता।", "కస్టమర్ ఇప్పుడే చెల్లిస్తారు. కొత్త బాకీ ఉండదు."),
+ "hint_repayment": ("The customer pays a specific amount toward an earlier credit purchase.", "ग्राहक पुराने उधार में एक तय राशि चुकाता है।", "కస్టమర్ పాత బాకీలో కొంత మొత్తం చెల్లిస్తారు."),
+ "hint_settlement": ("The customer pays the full remaining balance. Check the amount in the preview.", "ग्राहक पूरा बचा हुआ उधार चुकाता है। पूर्वावलोकन में राशि जाँचें।", "కస్టమర్ మిగిలిన బాకీ అంతా చెల్లిస్తారు. ప్రివ్యూలో మొత్తాన్ని తనిఖీ చేయండి."),
+ "hint_borrow": ("Someone lends money to the shop. The shop now owes that person more.", "कोई दुकान को कर्ज देता है। दुकान का कर्ज बढ़ता है।", "ఒకరు దుకాణానికి అప్పు ఇస్తారు. దుకాణం బాకీ పెరుగుతుంది."),
+ "hint_payback": ("The shop returns money it previously borrowed.", "दुकान पहले लिया हुआ कर्ज चुकाती है।", "దుకాణం గతంలో తీసుకున్న అప్పు తిరిగి చెల్లిస్తుంది."),
+ "hint_lend": ("The shop gives someone a money loan, tracked separately from goods sold on credit.", "दुकान किसी को पैसे उधार देती है। इसका हिसाब उधार बिक्री से अलग है।", "దుకాణం ఒకరికి డబ్బు అప్పుగా ఇస్తుంది. ఇది సరుకు బాకీకి వేరుగా ఉంటుంది."),
+ "hint_loan_repayment": ("Someone returns money the shop previously lent them.", "कोई दुकान से लिया हुआ ऋण लौटाता है।", "దుకాణం ఇచ్చిన అప్పును ఒకరు తిరిగి చెల్లిస్తారు."),
  "all_accounts": ("All accounts and cash sales", "सभी खाते और नकद बिक्री", "అన్ని ఖాతాలు మరియు నగదు అమ్మకాలు"),
  "dashboard": ("Dashboard", "डैशबोर्ड", "ముఖ్య పేజీ"),
  "record": ("Record transaction", "लेनदेन रिकॉर्ड करें", "లావాదేవీ నమోదు"),

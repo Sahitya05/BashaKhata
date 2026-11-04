@@ -12,10 +12,10 @@ from uuid import uuid4
 import requests
 import streamlit as st
 from extraction import extract, correct_amount
-from i18n import label
+from i18n import TEXT, label
 from ledger import Ledger, Transaction, KINDS, EFFECT, amount_paise, rupees
 from speech import INPUT_OPTIONS, transcribe
-from translation import AzureTranslator
+from translation import AzureTranslator, GeminiTranslator
 
 st.set_page_config(page_title="BhashaKhata", page_icon="🛒", layout="wide")
 
@@ -29,7 +29,7 @@ language = st.sidebar.selectbox("Output language · भाषा · భాష", 
                                format_func={"en": "English", "hi": "हिन्दी", "te": "తెలుగు"}.get,
                                key="output_language")
 def t(key):
-    return label(key, language)
+    return label(key if key in TEXT else "translation_unavailable", language)
 
 if secret("DEPLOYMENT_MODE", "local") != "local":
     st.error("Hosted mode is blocked until a persistent hosted database and per-shop authentication are configured and tested.")
@@ -138,32 +138,55 @@ elif page == "record":
             if st.button(t("review"), disabled=not manual.strip()):
                 new_draft({"transcript": manual, "request_key": "manual:" + uuid4().hex}, input_code)
                 st.rerun()
+        st.caption(t("practice_help"))
+        if st.button(t("practice")):
+            new_draft({
+                "transcript": "Asha bought groceries worth 200 rupees on credit.",
+                "request_key": "manual:" + uuid4().hex,
+                "practice": True,
+            }, "en-IN")
+            st.rerun()
     pending = st.session_state.get("pending")
     if pending:
         with st.expander(t("original"), expanded=True):
             st.text(pending["transcript"])
             st.caption("Gnani Prisma v3.0" if not pending["request_key"].startswith("manual:") else t("manual"))
-        translator = AzureTranslator(secret("AZURE_TRANSLATOR_KEY"), secret("AZURE_TRANSLATOR_REGION"), st.session_state.translation_cache)
-        if not translator.key:
-            st.info(t("translation_unavailable"))
+        gemini_key = secret("GEMINI_API_KEY")
+        if gemini_key:
+            translator = GeminiTranslator(gemini_key, secret("GEMINI_MODEL", "gemini-3.1-flash-lite"),
+                                          st.session_state.translation_cache)
         else:
-            attempts = pending.setdefault("translation_attempts", [])
-            retry = st.button(t("translate"))
-            if language not in attempts or retry:
-                if language not in attempts:
-                    attempts.append(language)
-                try:
-                    translator.translate(pending["transcript"], language)
-                except (requests.RequestException, ValueError) as exc:
-                    failure(exc)
-            if (pending["transcript"], language) not in st.session_state.translation_cache:
-                st.info(t("translation_unavailable"))
-        translated = st.session_state.translation_cache.get((pending["transcript"], language))
-        if translated:
-            st.success(translated)
+            translator = AzureTranslator(secret("AZURE_TRANSLATOR_KEY"), secret("AZURE_TRANSLATOR_REGION"),
+                                         st.session_state.translation_cache)
+        if pending.get("practice"):
+            st.caption(t("sample_explanation"))
+        else:
+            cache_key = (pending["transcript"], language)
+            translated = st.session_state.translation_cache.get(cache_key)
+            if translator.key and not translated:
+                attempts = pending.setdefault("translation_attempts", {})
+                if not isinstance(attempts, dict):
+                    attempts = pending["translation_attempts"] = {}
+                retry = st.button(t("translate"))
+                if retry or language not in attempts:
+                    try:
+                        translated = translator.translate(*cache_key)
+                        attempts.pop(language, None)
+                    except requests.HTTPError as exc:
+                        status = exc.response.status_code if exc.response is not None else None
+                        attempts[language] = "translation_service_busy" if status in (429, 502, 503, 504) else "translation_unavailable"
+                    except (requests.RequestException, ValueError):
+                        attempts[language] = "translation_unavailable"
+                if not translated:
+                    st.caption(t(attempts.get(language, "translation_unavailable")))
+            elif not translated:
+                st.caption(t("translation_unavailable"))
+            if translated:
+                st.success(translated)
 
         if not st.session_state.get("prepared"):
-            st.info(t("unsupported"))
+            if not st.session_state.get("draft_kind"):
+                st.caption(t("unsupported"))
             with st.expander(t("correction")):
                 st.caption('“No, amount 130 ka badle 150 karo.” / “Change amount from 130 to 150.”')
                 correction_audio = st.audio_input(t("correction"), sample_rate=16000,
@@ -187,6 +210,8 @@ elif page == "record":
             name = st.text_input(t("name"), key="draft_customer", disabled=selected != "new")
             note = st.text_input(t("note"), key="draft_note", disabled=selected != "new")
             kind = st.selectbox(t("kind"), [None, *KINDS], format_func=lambda k: t(k or "choose"), key="draft_kind")
+            if kind:
+                st.caption(t("hint_" + kind))
             product = st.text_input(t("product"), key="draft_product")
             cols = st.columns(2)
             quantity = cols[0].text_input(t("quantity"), key="draft_quantity")

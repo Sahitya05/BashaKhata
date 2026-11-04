@@ -10,7 +10,12 @@ python -m streamlit run app.py
 python -m pytest -q
 ```
 
-Keep your existing `GNANI_API_KEY` in `.streamlit/secrets.toml`. For optional
+Keep your existing `GNANI_API_KEY` in `.streamlit/secrets.toml`. To translate
+with Google AI Studio, add `GEMINI_API_KEY = "your-key"` to that file and restart
+Streamlit. Gemini takes priority when configured. Use fictional transcripts
+for the demo. Translation is for display only.
+
+For optional Azure
 translation, create a Translator resource in Azure Portal using the F0 tier.
 Under **Keys and Endpoint**, copy a key and the resource region into
 `AZURE_TRANSLATOR_KEY` and `AZURE_TRANSLATOR_REGION` in the same secrets file.
