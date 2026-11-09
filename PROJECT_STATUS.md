@@ -71,3 +71,8 @@
 - Browser-verified desktop appearance, home recording navigation, and return navigation. At 390px, document width equals viewport width with no horizontal overflow. Preview saved locally as homepage-preview.png.
 - Validation: compilation and git diff --check pass. Full suite: 58 passed, one startup timeout; the timed-out manual-confirmation/language test passed on isolated rerun (1 passed). Earlier label mismatch corrected before final validation.
 - No live speech/translation calls, commits, pushes, or deployments. Credentials and local ledger untouched.
+
+## Submission pitch, November 9
+
+- Prepared SOLUTION_PITCH.md as a short one-page-length solution pitch covering the problem, Gnani-powered workflow, verification mechanism, working prototype, and current limitations.
+- Documentation-only change; no API calls or customer data included. Publication pending explicit push authorization.
