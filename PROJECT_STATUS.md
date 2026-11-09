@@ -76,3 +76,10 @@
 
 - Prepared SOLUTION_PITCH.md as a short one-page-length solution pitch covering the problem, Gnani-powered workflow, verification mechanism, working prototype, and current limitations.
 - Documentation-only change; no API calls or customer data included. Publication pending explicit push authorization.
+
+
+## GitHub README refresh, November 9
+
+- Reworked README with a centered brand introduction, palette-matched technology badges, existing fictional homepage illustration, Mermaid review workflow, feature table, demo walkthrough, and Windows virtual-environment setup.
+- Preserved honest local-MVP scope, speech-evaluation limitations, data-flow explanation, and documentation links. No customer data or credentials added.
+- Documentation checks: all local links resolve, code fences are balanced, and git diff --check passes. No application code changed; runtime tests were not rerun. No commit or push performed.
