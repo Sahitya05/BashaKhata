@@ -130,41 +130,61 @@ if notice := st.session_state.pop("notice", None):
     st.success(t(notice))
 
 if page == "dashboard":
-    st.header(t("shop_glance"))
-    st.caption(t("hero"))
-    totals = ledger.totals()
-    for index, (col, bucket, symbol) in enumerate(zip(st.columns(4), ("receivable", "payable", "cash", "loan"), ("↙", "↗", "₹", "⇄"))):
-        with col:
-            balance_card(t(bucket), rupees(totals[bucket]), symbol, index)
-
     def go_record():
-        st.session_state.page = "record"
+        st.session_state.home_record = True
 
-    recorder, guide = st.columns([1.7, 1], gap="large")
-    with recorder, st.container(border=True, key="record_panel"):
-        voice_sculpture()
-        st.subheader(t("speak_review_save"))
-        speech_language, display_language = st.columns(2)
-        speech_language.selectbox(t("input"), list(INPUT_OPTIONS), key="input_language")
-        display_language.selectbox("Output language · भाषा · భాష", ["en", "hi", "te"],
-                                   format_func={"en": "English", "hi": "हिन्दी", "te": "తెలుగు"}.get,
-                                   key="output_language")
-        voice, sample = st.columns(2)
-        voice.button(t("new"), type="primary", on_click=go_record, width="stretch")
-        sample.button(t("practice"), on_click=open_sample, width="stretch")
-        st.caption(t("hero"))
-    with guide, st.container(border=True, key="how_panel"):
-        st.subheader(t("how_it_works"))
-        guide_cards([t(key) for key in ("step_record", "step_review", "step_confirm")])
-        with st.expander(t("guide_title")):
-            example_kind = st.selectbox(t("kind"), ["credit", "repayment", "cash", "borrow"], format_func=t, key="guide_kind")
-            st.write(t("hint_" + example_kind))
-    with st.container(border=True, key="recent_panel"):
-        st.subheader(t("recent"))
-        show_rows(ledger.history()[:10])
+    def home_sample():
+        open_sample()
+        st.session_state.page = "dashboard"
+        st.session_state.home_record = True
 
-elif page == "record":
+    if not st.session_state.get("home_record"):
+        with st.container(key="home_hero"):
+            copy, art = st.columns([1.25, 1], gap="large", vertical_alignment="center")
+            with copy:
+                st.html('<div class="eyebrow">YOUR SHOP. YOUR LANGUAGE. YOUR LEDGER.</div>'
+                        '<h1 class="home-title">Small shop.<br><em>Big possibilities.</em></h1>'
+                        '<p class="home-intro">Speak your business.<br>Keep every rupee in sight.</p>')
+                st.caption("Record a sale or payment in your own words. Review the details, then save with confidence.")
+                start, sample = st.columns([1.15, 1])
+                start.button(t("new"), type="primary", on_click=go_record, width="stretch")
+                sample.button(t("practice"), on_click=home_sample, width="stretch")
+                st.html('<div class="language-note">తెలుగు &nbsp; / &nbsp; हिन्दी &nbsp; / &nbsp; English</div>')
+            with art:
+                design.shop_scene()
+        steps(1, [t("step_record"), t("step_review"), t("step_confirm")])
+        st.subheader(t("shop_glance"))
+        totals = ledger.totals()
+        hints = ("Customers still need to pay you", "Money your shop needs to repay", "Sales paid for immediately", "Money you lent to someone")
+        for index, (col, bucket, symbol) in enumerate(zip(st.columns(4), ("receivable", "payable", "cash", "loan"), ("↙", "↗", "₹", "⇄"))):
+            with col:
+                balance_card(t(bucket), rupees(totals[bucket]), symbol, index)
+                st.caption(hints[index])
+    if not st.session_state.get("home_record"):
+        with st.container(key="home_bottom"):
+            recent, guide = st.columns([1.8, 1], gap="large")
+            with recent:
+                st.subheader(t("recent"))
+                rows = ledger.history()[:5]
+                if rows:
+                    design.recent_activity(rows, t, rupees)
+                else:
+                    st.info("Your first saved transaction will appear here. Start recording above.")
+            with guide:
+                st.subheader("A little clarity.")
+                st.caption("New to business terms? Pick one to see what it means.")
+                example_kind = st.selectbox(t("kind"), ["credit", "repayment", "cash", "borrow"], format_func=t, key="guide_kind")
+                st.info(t("hint_" + example_kind))
+
+if page == "record" or (page == "dashboard" and st.session_state.get("home_record")):
+
     st.header(t("record"))
+    if page == "dashboard":
+        if st.button("← Back to shop overview"):
+            st.session_state.home_record = False
+            st.rerun()
+        st.selectbox("Output language · भाषा · భాష", ["en", "hi", "te"],
+                     format_func={"en": "English", "hi": "हिन्दी", "te": "తెలుగు"}.get, key="output_language")
     if st.session_state.get("prepared"):
         step, step_label = 3, "step_confirm"
     elif st.session_state.get("pending"):

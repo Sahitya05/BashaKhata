@@ -31,3 +31,9 @@ instructions are in [SPEECH_EVALUATION.md](SPEECH_EVALUATION.md).
 The ledger file and credentials are ignored by Git. See
 [DEPLOYMENT.md](DEPLOYMENT.md) for the remaining cloud requirements and
 [PROJECT_STATUS.md](PROJECT_STATUS.md) for verification status.
+
+### Shop homepage
+
+The main dashboard uses a peach, forest green, crimson, and lime palette with a gently animated receipt illustration. Start with New voice transaction or Try a sample transaction. Recording, review, and explicit confirmation open within the home experience; Back to shop overview returns without saving a draft. Customer ledger and Reports remain accessible through the navigation.
+
+Balance explanations and a transaction-type guide help first-time users. The decorative receipt is explicitly labeled as an example. Reduced-motion preferences disable animation. The previous standalone console is no longer connected to the app.

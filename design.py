@@ -71,3 +71,35 @@ def steps(active, labels):
         f'<span>{index:02d}</span><strong>{escape(text)}</strong></div>'
         for index, text in enumerate(labels, 1)
     ) + '</nav>')
+
+
+def shop_scene():
+    """Decorative shop illustration; example receipt is explicitly fictional."""
+    st.html("""
+    <div class="shop-scene" aria-hidden="true">
+      <div class="scene-orbit orbit-a"></div><div class="scene-orbit orbit-b"></div>
+      <div class="red-sphere"></div><div class="scene-leaf"></div>
+      <div class="receipt"><span class="receipt-brand">BHASHAKHATA ↗</span>
+        <span class="receipt-small">AN EXAMPLE, NOT A SAVED ENTRY</span>
+        <div class="receipt-wave">▂ ▅ ▃ █ ▆ ▂ ▅ █ ▃ ▂</div>
+        <strong>Your words,<br>beautifully accounted for.</strong>
+        <div class="receipt-line"><span>Groceries</span><span>₹200</span></div>
+        <div class="receipt-line"><span>Payment</span><span>On credit</span></div>
+        <div class="receipt-total"><span>Review first.</span><span>✓</span></div>
+        <span class="receipt-small">SPEAK · REVIEW · SAVE</span>
+      </div>
+      <div class="lime-stamp">Made for<br><b>your shop.</b><span>✳</span></div>
+      <div class="scene-caption">LESS PAPERWORK. MORE POSSIBILITY.</div>
+    </div>
+    """)
+
+
+def recent_activity(rows, translate, format_money):
+    items = []
+    for row in rows:
+        amount = format_money(row['paise'] * (-1 if row['reversal_of'] else 1))
+        items.append('<div class="activity-row"><span class="activity-arrow">↗</span>'
+                     '<div><strong>' + escape(row['name'] or 'Cash sale') + '</strong><small>'
+                     + escape(translate(row['kind'])) + '</small></div><b>' + escape(amount)
+                     + '</b><span class="activity-status">Saved</span></div>')
+    st.html('<div class="activity-list">' + ''.join(items) + '</div>')

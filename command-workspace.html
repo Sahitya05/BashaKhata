@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BhashaKhata · Command Workspace</title>
+<style>
+:root{color-scheme:dark;--blue:#8DB9F0;--lavender:#E9E8F8;--peach:#FDA68E}
+*{box-sizing:border-box}body{margin:0;background:#0a0a0f;color:var(--lavender);font:14px ui-monospace,Consolas,monospace;overflow:hidden}
+#scene{position:fixed;inset:0;display:block;width:100%;height:100%}
+header{position:absolute;top:0;left:0;right:0;padding:24px 30px;display:flex;justify-content:space-between;gap:20px;pointer-events:none}
+.brand{font-size:17px;letter-spacing:.15em}.brand b{color:var(--blue)}small{display:block;color:#a5abc5;font-size:11px;line-height:1.8;letter-spacing:.08em}
+#status{color:var(--peach);font-size:11px;text-align:right}
+.dock{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:min(780px,calc(100% - 32px));border:1px solid #8db9f044;background:#101421ed;border-radius:18px;padding:14px;backdrop-filter:blur(16px);box-shadow:0 20px 60px #0008}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+button{border:1px solid #8db9f044;background:#8db9f012;color:var(--lavender);border-radius:8px;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer}
+button:hover{background:#8db9f030;border-color:var(--blue)}button:focus-visible,input:focus-visible{outline:2px solid var(--peach);outline-offset:3px}
+form{display:flex;gap:10px;align-items:center}label{color:var(--peach)}input{min-width:0;flex:1;background:transparent;color:var(--lavender);border:0;font:inherit;padding:8px}
+#fallback{display:none;position:absolute;inset:100px 20px 210px;background:#111524;border:1px solid #8db9f044;padding:20px;overflow:auto;white-space:pre-wrap}
+#hint{position:absolute;top:95px;left:30px;color:#a5abc5;font-size:11px;max-width:230px;line-height:1.8}
+#screenreader{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-width:600px){header{padding:18px}.brand{font-size:13px}#hint{top:80px;left:18px;max-width:170px}.dock{bottom:12px}.actions{gap:5px}button{padding:8px}#status{max-width:120px}}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.170.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.170.0/examples/jsm/"}}</script>
+</head>
+<body>
+<canvas id="scene" aria-label="Interactive 3D ledger workspace"></canvas>
+<header><div class="brand"><b>BHASHA</b>KHATA<small>COMMAND WORKSPACE / 01</small></div><div id="status">INITIALIZING</div></header>
+<div id="hint">Drag to orbit · Scroll to zoom<br>Select a floating control or type below.<br>Visualizers are decorative.</div>
+<pre id="fallback"></pre><div id="screenreader" role="log" aria-live="polite"></div>
+<div class="dock">
+<div class="actions">
+<button data-command="help">Help</button><button data-command="balance">Balances</button><button data-command="workflow">How to record</button>
+<button data-command="clear">Clear</button><button id="motion">Pause motion</button><button id="reset">Reset view</button>
+</div>
+<form id="command-form"><label for="command">BK&gt;</label><input id="command" autocomplete="off" spellcheck="false" maxlength="160" placeholder="Type help, balance, or workflow…" aria-label="Terminal command"><button type="submit">Run ↵</button></form>
+</div>
+<!-- The Streamlit host replaces only this JSON element with aggregate balances. -->
+<script id="ledger-data" type="application/json">null</script>
+<script type="module">
+// Visual tuning. All motion is time-based, independent of refresh rate.
+const FLOATING_SPEED = 0.65;
+const GLOW_INTENSITY = 1.5;
+const ROTATION_SPEED = 0.18;
+const MAX_PIXEL_RATIO = 1.5;
+const TEXT_REFRESH_HZ = 12;
+const BLUE = 0x8db9f0, LAVENDER = 0xe9e8f8, PEACH = 0xfda68e;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let motion = !reduceMotion.matches, renderer, controls, camera, frameId;
+let scene, consoleGroup, texture, context, textCanvas, hover=null, lastPaint=0;
+let dirty=true, cursor=true, historyIndex=0;
+const lines=['BHASHAKHATA / VERIFIED VOICE LEDGER'];
+const history=[], interactive=[], animated=[];
+const input=document.querySelector('#command'), fallback=document.querySelector('#fallback');
+const status=document.querySelector('#status');
+const ledger=JSON.parse(document.querySelector('#ledger-data').textContent);
+const money=value=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(value/100);
+function output(message){
+  lines.push(...message.split('\n')); while(lines.length>16) lines.shift();
+  dirty=true;
+  document.querySelector('#screenreader').textContent=message;
+  fallback.textContent=lines.join('\n');
+}
+function execute(command){
+  const normalized=command.trim().toLowerCase();
+  if(!normalized)return;
+  history.push(command);if(history.length>50)history.shift();historyIndex=history.length;
+  output('> '+command);
+  const commands={
+    help:()=>output('COMMANDS  help / balance / workflow / clear\nUse arrow keys for command history.\nDrag empty space to orbit. Reset view to recenter.'),
+    balance:()=>output(ledger?
+      'LEDGER SNAPSHOT\nCustomer credit  '+money(ledger.receivable)+'\nShop owes        '+money(ledger.payable)+'\nCash sales       '+money(ledger.cash)+'\nMoney lent       '+money(ledger.loan)+'\nReopen this view to refresh balances.':
+      'Standalone workspace. No ledger is connected.\nOpen this view inside BhashaKhata for balances.'),
+    workflow:()=>output('01  Open Record transaction in BhashaKhata.\n02  Speak, then check the original transcript.\n03  Select the account and review the amount.\n04  Preview the balance effect and confirm.'),
+    clear:()=>{lines.splice(0);dirty=true;fallback.textContent='';}
+  };
+  if(Object.hasOwn(commands,normalized))commands[normalized]();
+  else output('Unknown command. Type help for available commands.');
+}
+document.querySelector('#command-form').addEventListener('submit',event=>{
+  event.preventDefault();execute(input.value);input.value='';dirty=true;
+});
+document.querySelectorAll('[data-command]').forEach(button=>button.addEventListener('click',()=>execute(button.dataset.command)));
+input.addEventListener('input',()=>{dirty=true;});
+input.addEventListener('keydown',event=>{
+  if(event.key==='ArrowUp'||event.key==='ArrowDown'){
+    event.preventDefault();historyIndex=Math.max(0,Math.min(history.length,historyIndex+(event.key==='ArrowUp'?-1:1)));
+    input.value=history[historyIndex]||'';dirty=true;
+  }
+});
+function updateMotion(){
+  document.querySelector('#motion').textContent=motion?'Pause motion':'Resume motion';
+}
+document.querySelector('#motion').addEventListener('click',()=>{motion=!motion;updateMotion();});
+reduceMotion.addEventListener('change',()=>{motion=!reduceMotion.matches;updateMotion();});
+updateMotion();
+function fail(message){
+  status.textContent='TEXT MODE';
+  fallback.style.display='block';output(message);
+}
+try{
+  // Dynamic imports preserve functional text controls if WebGL or the CDN fails.
+  const THREE=await import('three');
+  const {OrbitControls}=await import('three/addons/controls/OrbitControls.js');
+  renderer=new THREE.WebGLRenderer({canvas:document.querySelector('#scene'),antialias:true,alpha:false});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,MAX_PIXEL_RATIO));
+  renderer.setClearColor(0x0a0a0f);renderer.outputColorSpace=THREE.SRGBColorSpace;
+  scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x0a0a0f,.025);
+  camera=new THREE.PerspectiveCamera(42,1,.1,100);
+  controls=new OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true;controls.enablePan=false;controls.minDistance=9;controls.maxDistance=28;
+  controls.minPolarAngle=.55;controls.maxPolarAngle=1.65;
+  function resetView(){
+    camera.position.set(1.1,5.6,innerWidth<600?23:14.6);
+    controls.target.set(0,.2,0);controls.update();
+  }
+  document.querySelector('#reset').addEventListener('click',resetView);
+  function resize(){
+    camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);resetView();
+  }
+  addEventListener('resize',resize);resize();
+  scene.add(new THREE.AmbientLight(LAVENDER,.45));
+  const blueLight=new THREE.DirectionalLight(BLUE,3);blueLight.position.set(-4,6,5);scene.add(blueLight);
+  const peachLight=new THREE.DirectionalLight(PEACH,2.5);peachLight.position.set(5,2,2);scene.add(peachLight);
+  const scanner=new THREE.PointLight(BLUE,15,15);scanner.position.set(0,3,4);scene.add(scanner);
+  // One tessellated grid mesh. Vertex displacement runs on the GPU.
+  const gridMaterial=new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,wireframe:true,
+    uniforms:{time:{value:0},tint:{value:new THREE.Color(BLUE)}},
+    vertexShader:'uniform float time; varying float fade; void main(){vec3 p=position;p.z+=sin(p.x*.7+time*.4)*cos(p.y*.5+time*.3)*.16;fade=1.-smoothstep(4.,18.,length(p.xy));gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}',
+    fragmentShader:'uniform vec3 tint;varying float fade;void main(){gl_FragColor=vec4(tint,.14*fade);}'
+  });
+  const grid=new THREE.Mesh(new THREE.PlaneGeometry(40,40,48,48),gridMaterial);
+  grid.rotation.x=-Math.PI/2;grid.position.y=-2.8;scene.add(grid);
+  consoleGroup=new THREE.Group();consoleGroup.rotation.x=-.08;scene.add(consoleGroup);animated.push(consoleGroup);
+  const baseMaterial=new THREE.MeshPhysicalMaterial({color:0x162439,metalness:.65,roughness:.3,transparent:true,opacity:.9,clearcoat:1});
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(8.5,4.9,.18),baseMaterial);consoleGroup.add(shell);
+  const rim=new THREE.LineSegments(new THREE.EdgesGeometry(shell.geometry),new THREE.LineBasicMaterial({color:BLUE,transparent:true,opacity:.8}));
+  rim.position.z=.03;consoleGroup.add(rim);
+  // Text redraws only on changes or cursor ticks, rather than on every frame.
+  textCanvas=document.createElement('canvas');textCanvas.width=1536;textCanvas.height=832;
+  context=textCanvas.getContext('2d');texture=new THREE.CanvasTexture(textCanvas);texture.colorSpace=THREE.SRGBColorSpace;
+  const screen=new THREE.Mesh(new THREE.PlaneGeometry(8.05,4.36),new THREE.MeshBasicMaterial({map:texture}));
+  screen.position.z=.11;consoleGroup.add(screen);
+  const scan=new THREE.Mesh(new THREE.PlaneGeometry(8.05,4.36),new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,uniforms:{time:{value:0}},
+    vertexShader:'varying vec2 v;void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:'uniform float time;varying vec2 v;void main(){float line=pow(.5+.5*sin(v.y*900.),8.);float sweep=exp(-pow((v.y-fract(time*.09))*20.,2.));gl_FragColor=vec4(.55,.73,.94,line*.035+sweep*.05);}'
+  }));scan.position.z=.12;consoleGroup.add(scan);
+  function textLabel(text){
+    const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
+    const ctx=canvas.getContext('2d');ctx.font='bold 38px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#E9E8F8';ctx.fillText(text,256,64);
+    const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
+    return new THREE.Mesh(new THREE.PlaneGeometry(1.6,.4),new THREE.MeshBasicMaterial({map,transparent:true,depthWrite:false}));
+  }
+  ['help','balance','workflow'].forEach((command,index)=>{
+    const button=new THREE.Mesh(new THREE.BoxGeometry(2.2,.55,.15),new THREE.MeshStandardMaterial({color:0x17263d,emissive:BLUE,emissiveIntensity:.16,metalness:.6,roughness:.3}));
+    button.position.set((index-1)*2.6,-2.95,.1);button.userData.command=command;
+    const label=textLabel(command.toUpperCase());label.position.z=.09;button.add(label);
+    consoleGroup.add(button);interactive.push(button);
+  });
+  // Procedural orbit globe, status rings, and a single instanced bar mesh.
+  const globe=new THREE.Mesh(new THREE.IcosahedronGeometry(1.15,2),new THREE.MeshBasicMaterial({color:BLUE,wireframe:true,transparent:true,opacity:.35}));
+  globe.position.set(-6,1.2,-.5);scene.add(globe);animated.push(globe);
+  const rings=new THREE.Group();rings.position.set(5.8,1.4,-.6);
+  for(let i=0;i<3;i++){
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.75+i*.22,.015,6,80),new THREE.MeshBasicMaterial({color:i===1?PEACH:BLUE}));
+    ring.rotation.x=i*.65;ring.rotation.y=i*.5;rings.add(ring);
+  }
+  scene.add(rings);animated.push(rings);
+  const bars=new THREE.InstancedMesh(new THREE.BoxGeometry(.18,1,.18),new THREE.MeshStandardMaterial({color:PEACH,emissive:PEACH,emissiveIntensity:.2}),12);
+  bars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);bars.position.set(5.1,-1.2,0);scene.add(bars);
+  const dummy=new THREE.Object3D();
+  const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+  let pointerDown=null;
+  renderer.domElement.addEventListener('pointermove',event=>{
+    pointer.set(event.clientX/innerWidth*2-1,-event.clientY/innerHeight*2+1);
+    raycaster.setFromCamera(pointer,camera);hover=raycaster.intersectObjects(interactive,false)[0]?.object||null;
+    renderer.domElement.style.cursor=hover?'pointer':'grab';
+  });
+  renderer.domElement.addEventListener('pointerleave',()=>{hover=null;});
+  renderer.domElement.addEventListener('pointerdown',event=>{pointerDown=[event.clientX,event.clientY];});
+  renderer.domElement.addEventListener('pointerup',event=>{
+    if(pointerDown&&Math.hypot(event.clientX-pointerDown[0],event.clientY-pointerDown[1])<6){
+      pointer.set(event.clientX/innerWidth*2-1,-event.clientY/innerHeight*2+1);
+      raycaster.setFromCamera(pointer,camera);
+      const hit=raycaster.intersectObjects(interactive,false)[0];
+      if(hit){execute(hit.object.userData.command);input.focus();}
+    }pointerDown=null;
+  });
+  function paint(){
+    context.fillStyle='#0c1220';context.fillRect(0,0,1536,832);
+    context.font='24px monospace';context.fillStyle='#8DB9F0';context.fillText('BK / COMMAND INTERFACE',44,48);
+    context.fillStyle='#FDA68E';context.fillText(ledger?'LEDGER SNAPSHOT':'STANDALONE',1120,48);
+    context.fillStyle='#8db9f044';context.fillRect(44,70,1448,2);
+    context.font='26px monospace';
+    lines.slice(-16).forEach((line,index)=>{context.fillStyle=line.startsWith('>')?'#FDA68E':'#E9E8F8';context.fillText(line.slice(0,88),44,116+index*35);});
+    const prompt='BK> '+input.value.slice(-80);
+    context.fillStyle='#8DB9F0';context.fillText(prompt,44,780);
+    if(cursor){context.fillStyle='#FDA68E';context.fillRect(44+context.measureText(prompt).width+6,756,16,29);}
+    texture.needsUpdate=true;dirty=false;
+  }
+  const start=performance.now();let previous=start,elapsed=0,bootIndex=0;
+  const boot=['SYSTEM BOOT…','INTERFACE READY','VOICE LEDGER WORKSPACE ONLINE','Type help to explore. Transactions require review.'];
+  status.textContent=ledger?'LOCAL LEDGER · READ ONLY':'STANDALONE · INTERACTIVE';
+  function animate(now){
+    if(document.hidden){previous=now;frameId=requestAnimationFrame(animate);return;}
+    const dt=Math.min((now-previous)/1000,.05);previous=now;
+    if(motion)elapsed+=dt;
+    const bootTime=(now-start)/1000;
+    if(bootIndex<boot.length&&bootTime>bootIndex*.45){output(boot[bootIndex++]);}
+    animated.forEach((object,index)=>{
+      const progress=reduceMotion.matches?1:THREE.MathUtils.clamp((bootTime-index*.2)/.9,0,1);
+      object.scale.setScalar(Math.max(.001,1-Math.pow(1-progress,3)));
+    });
+    consoleGroup.position.y=Math.sin(elapsed*FLOATING_SPEED)*.07;
+    globe.rotation.y=elapsed*ROTATION_SPEED;rings.rotation.z=-elapsed*ROTATION_SPEED;
+    scanner.position.x=Math.sin(elapsed*.5)*5;
+    gridMaterial.uniforms.time.value=elapsed;scan.material.uniforms.time.value=elapsed;
+    for(let i=0;i<12;i++){
+      const height=.25+(Math.sin(elapsed*1.2+i*.7)+1)*.38;
+      dummy.position.set(i*.23,height/2,0);dummy.scale.set(1,height,1);dummy.updateMatrix();bars.setMatrixAt(i,dummy.matrix);
+    }bars.instanceMatrix.needsUpdate=true;
+    interactive.forEach(button=>{
+      const selected=button===hover;
+      button.material.emissiveIntensity=selected?GLOW_INTENSITY:.16;
+      const target=selected?1.06:1;button.scale.setScalar(THREE.MathUtils.lerp(button.scale.x,target,Math.min(1,dt*14)));
+    });
+    const nextCursor=motion?Math.floor(now/550)%2===0:true;
+    if(cursor!==nextCursor){cursor=nextCursor;dirty=true;}
+    if(dirty&&now-lastPaint>1000/TEXT_REFRESH_HZ){paint();lastPaint=now;}
+    controls.update();renderer.render(scene,camera);frameId=requestAnimationFrame(animate);
+  }
+  frameId=requestAnimationFrame(animate);
+  renderer.domElement.addEventListener('webglcontextlost',event=>{event.preventDefault();cancelAnimationFrame(frameId);fail('Graphics context lost. Reload to restore the 3D workspace.');});
+  addEventListener('pagehide',()=>{
+    cancelAnimationFrame(frameId);controls.dispose();
+    scene.traverse(object=>{
+      object.geometry?.dispose();
+      const materials=Array.isArray(object.material)?object.material:[object.material];
+      materials.filter(Boolean).forEach(material=>{material.map?.dispose();material.dispose();});
+    });renderer.dispose();
+  },{once:true});
+}catch(error){fail('3D graphics could not load. Check WebGL and access to unpkg.com. Text commands remain available.');}
+</script>
+</body>
+</html>

@@ -7,13 +7,13 @@ gatherUsageStats = false
 
 [theme]
 base = "light"
-primaryColor = "#590907"
-backgroundColor = "#FBF5ED"
-secondaryBackgroundColor = "#E8D2B5"
-textColor = "#362521"
+primaryColor = "#123E2C"
+backgroundColor = "#F9D5B8"
+secondaryBackgroundColor = "#FFF3E5"
+textColor = "#123E2C"
 font = "sans serif"
 
 [theme.sidebar]
-backgroundColor = "#A5A79B"
-secondaryBackgroundColor = "#E8D2B5"
-textColor = "#291D19"
+backgroundColor = "#F9D5B8"
+secondaryBackgroundColor = "#FFF3E5"
+textColor = "#123E2C"

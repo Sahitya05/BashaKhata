@@ -52,3 +52,22 @@
 - Browser-verified the live dashboard at 1440px and 390px widths. The mobile page had no horizontal overflow. Fixed a stale presentation-module import found during live inspection.
 - Regression suite: 59 passed. git diff --check passed. No live speech or translation calls were needed for UI validation.
 - Changes remain local; no push performed.
+
+## Palette 1 and Three.js workspace, November 7
+
+- Applied powder blue, lavender white, and peach across the Streamlit theme.
+- Added command-workspace.html, a standalone procedural Three.js scene, and the Dashboard's optional 3D command workspace toggle. Only aggregate balance snapshots enter the iframe; saving still requires the existing review workflow.
+- Includes orbit controls, raycast buttons, keyboard command history, shader grid and scanlines, instanced decorative bars, boot animation, reduced motion, pause, and text fallback.
+- Browser verified scene rendering, balance and help commands, and pause control. No console errors observed. At 390px the host page had no horizontal overflow. Sustained 60fps and mobile-device GPU performance have not been benchmarked.
+- Validation: 59 Python tests passed; Python compilation and diff whitespace checks passed. No live API calls made. No push or deployment performed.
+- Three.js modules require access to unpkg. Standalone mode has no connected ledger.
+
+
+## Integrated editorial homepage, November 7
+
+- Replaced the console toggle with a single home experience inspired by unseen.co's spacious typography and composition, using the user's orchard reference palette: peach, forest green, crimson, and lime.
+- Added a procedural CSS receipt scene with gentle motion and hover response; no external assets or CDN required for the homepage. Example receipt is labeled as fictional.
+- Home actions open the existing record/review/confirm workflow in place. Added return-to-overview action, plain-language balance descriptions, recent activity, and transaction-type help. Preserved original speech requests and financial confirmation logic.
+- Browser-verified desktop appearance, home recording navigation, and return navigation. At 390px, document width equals viewport width with no horizontal overflow. Preview saved locally as homepage-preview.png.
+- Validation: compilation and git diff --check pass. Full suite: 58 passed, one startup timeout; the timed-out manual-confirmation/language test passed on isolated rerun (1 passed). Earlier label mismatch corrected before final validation.
+- No live speech/translation calls, commits, pushes, or deployments. Credentials and local ledger untouched.
